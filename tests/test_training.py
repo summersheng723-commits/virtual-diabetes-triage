@@ -1,4 +1,6 @@
-import json, os
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from model.train_v01 import train_and_eval
 
 def test_train_v01_writes_metrics(tmp_path, monkeypatch):
