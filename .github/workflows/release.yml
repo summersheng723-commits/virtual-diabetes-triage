@@ -1,0 +1,63 @@
+name: release
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: |
+          docker build -t ${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME} .
+
+      - name: Smoke test container
+        run: |
+          docker run -d -p 8080:8080 --name svc ${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}
+          sleep 3
+          curl -sSf http://localhost:8080/health | grep '"status":"ok"'
+          curl -sSf -X POST http://localhost:8080/predict \
+            -H 'Content-Type: application/json' \
+            -d '{"age":0.02,"sex":-0.044,"bmi":0.06,"bp":-0.03,"s1":-0.02,"s2":0.03,"s3":-0.02,"s4":0.02,"s5":0.02,"s6":-0.001}' \
+            | grep '"prediction"'
+          docker rm -f svc
+
+      - name: Push image
+        run: docker push ${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}
+
+      - name: Gather metrics for release notes
+        run: |
+          python model/train_v01.py > metrics_v01_release.txt
+          if [[ "${GITHUB_REF_NAME}" == "v0.2" ]]; then
+            python model/train_v02.py > metrics_v02_release.txt
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            See CHANGELOG.md for summarized changes.
+            Metrics (v0.1): $(cat metrics_v01_release.txt)
+            $( [ -f metrics_v02_release.txt ] && echo "Metrics (v0.2): $(cat metrics_v02_release.txt)" )
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

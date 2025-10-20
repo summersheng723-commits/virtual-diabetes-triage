@@ -1,0 +1,35 @@
+# ===== build stage: train and bake model =====
+FROM python:3.11-slim AS build
+ARG MODEL_VERSION=v0.1
+# maps model version -> training script + output file
+ARG TRAIN_SCRIPT=model/train_v01.py
+ARG MODEL_FILE=model/model_v01.joblib
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# copy training code
+COPY model/ model/
+# train (script chooses scaler/model etc.)
+RUN python ${TRAIN_SCRIPT}
+
+# ===== run stage: serve API with baked model =====
+FROM python:3.11-slim
+ARG MODEL_VERSION=v0.1
+ARG MODEL_FILE=model/model_v01.joblib
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# copy service and the trained artifact from build stage
+COPY --from=build /app/${MODEL_FILE} /app/${MODEL_FILE}
+COPY app/ app/
+
+# service configuration
+ENV MODEL_PATH=/app/${MODEL_FILE}
+ENV MODEL_VERSION=${MODEL_VERSION}
+EXPOSE 8080
+
+CMD ["uvicorn", "app.main:app", "--host=0.0.0.0", "--port=8080"]

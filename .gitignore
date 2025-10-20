@@ -1,0 +1,13 @@
+# venv & caches
+.venv/
+__pycache__/
+*.pyc
+
+# local env
+.env
+
+# large / generated artifacts
+model/*.joblib
+
+# OS junk
+.DS_Store
